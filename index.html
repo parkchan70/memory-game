@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>음악 기호 메모리 게임</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f8ff; /* 연한 하늘색 배경 */
+            margin-top: 20px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(6, 80px);
+            grid-gap: 10px;
+            /* 그리드 크기가 고정되어 있지만, 카드가 사라지면서 레이아웃이 약간 틀어질 수 있습니다. */
+            /* 필요하다면 min-height 등을 설정하여 컨테이너 높이를 고정할 수도 있습니다. */
+        }
+
+        .card {
+            width: 80px;
+            height: 100px;
+            background-color: #a8dadc; /* 파스텔톤 뒷면 색상 1 */
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            cursor: pointer;
+            perspective: 1000px;
+            transition: transform 0.3s, opacity 0.5s ease-out; /* 투명도 변화 애니메이션 추가 */
+        }
+
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transition: transform 0.3s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+        }
+
+        .card-front {
+            background-color: #457b9d; /* 파스텔톤 앞면 색상 (숫자) */
+            color: white;
+            font-size: 30px;
+        }
+
+        .card-back {
+            background-color: #1d3557; /* 파스텔톤 뒷면 색상 2 (기호) */
+            color: white;
+            font-size: 40px;
+            transform: rotateY(180deg);
+        }
+
+        /* 매칭된 카드를 투명하게 만들고 클릭 불가능하게 설정 */
+        .card.matched {
+            opacity: 0; /* 카드가 사라지도록 투명도 설정 */
+            pointer-events: none; /* 클릭 이벤트 비활성화 */
+        }
+
+        h1 {
+            color: #457b9d;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>음악 기호 카드 맞추기</h1>
+    <div class="container">
+        </div>
+
+    <audio id="flipSound" src="flip.mp3"></audio>
+    <audio id="matchSound" src="ding.mp3"></audio> <audio id="mismatchSound" src="peong.mp3"></audio> <audio id="popSound" src="pop.mp3"></audio> <script>
+        const container = document.querySelector('.container');
+        const flipSound = document.getElementById('flipSound');
+        const matchSound = document.getElementById('matchSound'); // 띠리링
+        const mismatchSound = document.getElementById('mismatchSound'); // 틀렸을 때
+        const popSound = document.getElementById('popSound'); // 사라질 때 펑 소리
+
+        const symbols = ['🎵', '🎶', '🎼', '🎹', '🎺', '🎻', '🥁', '🎸', '🎷', ' flute ', ' harp ', ' xylophone ']; // 12개
+        let duplicatedSymbols = [...symbols, ...symbols]; // 총 24개 카드
+        let cardsArray = [];
+        let flippedCards = [];
+        let matchedCards = [];
+        let lockBoard = false; // 카드를 뒤집는 동안 다른 카드 클릭 방지
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const temp = array [i];
+                array [i] = array [j];
+                array [j] = temp;
+            }
+        }
+
+        function createCard(symbol, index) {
+            const card = document.createElement('div');
+            card.classList.add('card');
+            card.dataset.index = index; // 인덱스는 카드 위치에 따라 부여 (나중에 필요 없을 수도 있음)
+
+            const cardInner = document.createElement('div');
+            cardInner.classList.add('card-inner');
+
+            const cardFront = document.createElement('div');
+            cardFront.classList.add('card-front');
+            cardFront.textContent = index + 1; // 카드 앞면 번호
+
+            const cardBack = document.createElement('div');
+            cardBack.classList.add('card-back');
+            cardBack.textContent = symbol; // 카드 뒷면 기호
+
+            cardInner.appendChild(cardFront);
+            cardInner.appendChild(cardBack);
+            card.appendChild(cardInner);
+
+            card.addEventListener('click', flipCard);
+            return card;
+        }
+
+        function setupGame() {
+            shuffleArray(duplicatedSymbols); // 기호 섞기
+            container.innerHTML = ''; // 게임 재시작 시 기존 카드 제거
+            cardsArray = []; // 카드 배열 초기화
+            flippedCards = [];
+            matchedCards = [];
+            lockBoard = false;
+
+            duplicatedSymbols.forEach((symbol, index) => {
+                const card = createCard(symbol, index);
+                cardsArray.push(card);
+                container.appendChild(card);
+            });
+        }
+
+        function playSound(audioElement) {
+            audioElement.currentTime = 0; // 사운드를 처음부터 재생
+            audioElement.play();
+        }
+
+        function flipCard() {
+            // 보드 잠금 상태이거나, 이미 뒤집힌 카드이거나, 이미 맞춰진 카드면 클릭 무시
+            if (lockBoard || this === flippedCards [0] || this.classList.contains('matched')) return;
+
+            playSound(flipSound); // 카드 뒤집는 소리
+
+            this.classList.add('flipped'); // 카드 뒤집기
+            flippedCards.push(this); // 뒤집힌 카드 배열에 추가
+
+            if (flippedCards.length === 2) { // 두 장의 카드가 뒤집혔으면
+                checkForMatch(); // 일치 여부 확인
+            }
+        }
+
+        function checkForMatch() {
+            lockBoard = true; // 보드 잠금
+            const [card1, card2] = flippedCards;
+            const symbol1 = card1.querySelector('.card-back').textContent;
+            const symbol2 = card2.querySelector('.card-back').textContent;
+
+            if (symbol1 === symbol2) { // 두 카드의 기호가 같으면
+                matchCards(); // 맞춤 처리
+            } else { // 다르면
+                unflipCards(); // 다시 뒤집기
+            }
+        }
+
+        function matchCards() {
+            playSound(popSound); // 펑 소리 재생
+
+            flippedCards.forEach(card => {
+                card.classList.add('matched'); // 매칭된 카드 클래스 추가 (사라지게 함)
+            });
+            matchedCards.push(...flippedCards); // 맞춘 카드 배열에 추가
+
+            resetBoard(); // 보드 상태 초기화
+        }
+
+        function unflipCards() {
+            playSound(mismatchSound); // 틀렸을 때 소리 재생
+            setTimeout(() => {
+                flippedCards.forEach(card => card.classList.remove('flipped')); // 다시 뒤집기
+                resetBoard(); // 보드 상태 초기화
+            }, 1000); // 1초 후 뒤집음
+        }
+
+        function resetBoard() {
+            flippedCards = []; // 뒤집힌 카드 배열 초기화
+            lockBoard = false; // 보드 잠금 해제
+
+            // 모든 카드를 다 맞췄는지 확인
+            if (matchedCards.length === duplicatedSymbols.length) {
+                setTimeout(() => {
+                    alert('🎉 모두 맞추셨습니다! 다시 시작합니다! 🎉');
+                    resetGame(); // 게임 재시작
+                }, 500); // 0.5초 후 알림 및 재시작
+            }
+        }
+
+        function resetGame() {
+            setupGame(); // 게임 초기 설정 다시 실행
+        }
+
+        // 게임 시작
+        setupGame();
+    </script>
+</body>
+</html>
