@@ -14,12 +14,43 @@
             margin-top: 20px;
         }
 
+        .header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between; /* 제목과 버튼을 양 끝으로 배치 */
+            align-items: center;
+            max-width: 550px; /* 컨테이너 너비와 유사하게 설정 */
+            margin-bottom: 20px;
+            padding: 0 10px; /* 좌우 여백 */
+        }
+
+        h1 {
+            color: #457b9d;
+            margin: 0; /* 기본 마진 제거 */
+            font-size: 28px; /* 제목 크기 조정 */
+        }
+
+        .restart-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #1d3557; /* 버튼 배경색 */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .restart-button:hover {
+            background-color: #457b9d; /* 호버 시 색상 변경 */
+        }
+
         .container {
             display: grid;
             grid-template-columns: repeat(6, 80px);
             grid-gap: 10px;
-            /* 그리드 크기가 고정되어 있지만, 카드가 사라지면서 레이아웃이 약간 틀어질 수 있습니다. */
-            /* 필요하다면 min-height 등을 설정하여 컨테이너 높이를 고정할 수도 있습니다. */
+            max-width: 550px; /* 카드 6개 * 80px + 5개 * 10px = 480 + 50 = 530px */
+            justify-content: center; /* 그리드 중앙 정렬 */
         }
 
         .card {
@@ -77,46 +108,54 @@
             opacity: 0; /* 카드가 사라지도록 투명도 설정 */
             pointer-events: none; /* 클릭 이벤트 비활성화 */
         }
-
-        h1 {
-            color: #457b9d;
-            margin-bottom: 20px;
-        }
     </style>
 </head>
 <body>
-    <h1>음악 기호 카드 맞추기</h1>
+    <div class="header">
+        <h1>음악 기호 카드 맞추기 🎵</h1>
+        <button class="restart-button" id="restartButton">다시 시작</button>
+    </div>
+
     <div class="container">
         </div>
 
     <audio id="flipSound" src="flip.mp3"></audio>
     <audio id="matchSound" src="ding.mp3"></audio> <audio id="mismatchSound" src="peong.mp3"></audio> <audio id="popSound" src="pop.mp3"></audio> <script>
         const container = document.querySelector('.container');
+        const restartButton = document.getElementById('restartButton');
         const flipSound = document.getElementById('flipSound');
         const matchSound = document.getElementById('matchSound'); // 띠리링
         const mismatchSound = document.getElementById('mismatchSound'); // 틀렸을 때
         const popSound = document.getElementById('popSound'); // 사라질 때 펑 소리
 
-        const symbols = ['🎵', '🎶', '🎼', '🎹', '🎺', '🎻', '🥁', '🎸', '🎷', ' flute ', ' harp ', ' xylophone ']; // 12개
-        let duplicatedSymbols = [...symbols, ...symbols]; // 총 24개 카드
-        let cardsArray = [];
-        let flippedCards = [];
-        let matchedCards = [];
-        let lockBoard = false; // 카드를 뒤집는 동안 다른 카드 클릭 방지
+        // 이미지에 있는 순수한 음악 기호들만 사용 (총 12가지)
+        const symbols = [
+            '♩', '♪', '♬', '♭', '♮', '♯', '𝄞', '𝄢', '𝄫', '𝄪', '𝆑', '𝆏'
+            // 참고: 'p', 'f', 쉼표 기호 등은 글자 또는 다른 종류의 기호로 분류될 수 있어 제외했습니다.
+            // 만약 'p', 'f', 쉼표도 포함하고 싶으시면 아래 배열에 추가하시면 됩니다.
+            // 예를 들어: '♩', '♪', '♬', '♭', '♮', '♯', '𝄞', '𝄢', '𝄫', '𝄪', '𝆑', '𝆏', '𝆁', '𝆂', '𝆃', '𝆄', '𝆅', '𝆆', '𝆇', '𝆈' 등 다양한 음악 기호가 있습니다.
+            // 현재 이미지에 명확하게 보이는 기호만 포함했습니다.
+        ];
 
+        let duplicatedSymbols = []; // symbols 배열의 각 요소를 두 번씩 포함하여 24개 카드 생성
+        let cardsArray = []; // 생성된 카드 DOM 요소들을 저장
+        let flippedCards = []; // 현재 뒤집힌 카드 2개를 저장
+        let matchedCards = []; // 맞춰진 카드들을 저장
+        let lockBoard = false; // 카드가 뒤집히는 동안 추가 클릭 방지
+
+        // 배열 요소들을 무작위로 섞는 함수 (Fisher-Yates 셔플 알고리즘)
         function shuffleArray(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
-                const temp = array [i];
-                array [i] = array [j];
-                array [j] = temp;
+                [array[i], array[j]] = [array[j], array[i]]; // ES6 스왑 방식
             }
         }
 
+        // 개별 카드 DOM 요소를 생성하는 함수
         function createCard(symbol, index) {
             const card = document.createElement('div');
             card.classList.add('card');
-            card.dataset.index = index; // 인덱스는 카드 위치에 따라 부여 (나중에 필요 없을 수도 있음)
+            card.dataset.symbol = symbol; // 카드에 어떤 기호가 숨겨져 있는지 데이터로 저장
 
             const cardInner = document.createElement('div');
             cardInner.classList.add('card-inner');
@@ -133,18 +172,23 @@
             cardInner.appendChild(cardBack);
             card.appendChild(cardInner);
 
-            card.addEventListener('click', flipCard);
+            card.addEventListener('click', flipCard); // 카드 클릭 이벤트 리스너 추가
             return card;
         }
 
+        // 게임을 초기 설정하고 시작하는 함수
         function setupGame() {
+            // symbols 배열의 각 기호를 두 번씩 복사하여 24개 카드 데이터 생성
+            duplicatedSymbols = [...symbols, ...symbols];
             shuffleArray(duplicatedSymbols); // 기호 섞기
-            container.innerHTML = ''; // 게임 재시작 시 기존 카드 제거
-            cardsArray = []; // 카드 배열 초기화
+
+            container.innerHTML = ''; // 기존 카드 모두 제거 (재시작 시 필요)
+            cardsArray = [];
             flippedCards = [];
             matchedCards = [];
             lockBoard = false;
 
+            // 섞인 기호 배열을 바탕으로 카드 생성 및 DOM에 추가
             duplicatedSymbols.forEach((symbol, index) => {
                 const card = createCard(symbol, index);
                 cardsArray.push(card);
@@ -152,18 +196,20 @@
             });
         }
 
+        // 오디오 재생을 위한 헬퍼 함수
         function playSound(audioElement) {
             audioElement.currentTime = 0; // 사운드를 처음부터 재생
             audioElement.play();
         }
 
+        // 카드를 뒤집는 함수 (클릭 이벤트 핸들러)
         function flipCard() {
             // 보드 잠금 상태이거나, 이미 뒤집힌 카드이거나, 이미 맞춰진 카드면 클릭 무시
-            if (lockBoard || this === flippedCards [0] || this.classList.contains('matched')) return;
+            if (lockBoard || this === flippedCards[0] || this.classList.contains('matched')) return;
 
-            playSound(flipSound); // 카드 뒤집는 소리
+            playSound(flipSound); // 카드 뒤집는 소리 재생
 
-            this.classList.add('flipped'); // 카드 뒤집기
+            this.classList.add('flipped'); // 카드 뒤집기 애니메이션 적용
             flippedCards.push(this); // 뒤집힌 카드 배열에 추가
 
             if (flippedCards.length === 2) { // 두 장의 카드가 뒤집혔으면
@@ -171,11 +217,12 @@
             }
         }
 
+        // 뒤집힌 카드 두 장이 일치하는지 확인하는 함수
         function checkForMatch() {
-            lockBoard = true; // 보드 잠금
-            const [card1, card2] = flippedCards;
-            const symbol1 = card1.querySelector('.card-back').textContent;
-            const symbol2 = card2.querySelector('.card-back').textContent;
+            lockBoard = true; // 보드 잠금 (추가 클릭 방지)
+            const [card1, card2] = flippedCards; // 뒤집힌 두 카드 가져오기
+            const symbol1 = card1.dataset.symbol; // 첫 번째 카드의 기호
+            const symbol2 = card2.dataset.symbol; // 두 번째 카드의 기호
 
             if (symbol1 === symbol2) { // 두 카드의 기호가 같으면
                 matchCards(); // 맞춤 처리
@@ -184,25 +231,30 @@
             }
         }
 
+        // 카드가 일치했을 때 처리하는 함수 (사라지게 함)
         function matchCards() {
             playSound(popSound); // 펑 소리 재생
 
+            // 뒤집힌 두 카드를 'matched' 상태로 만들고 애니메이션 후 사라지게 함
             flippedCards.forEach(card => {
-                card.classList.add('matched'); // 매칭된 카드 클래스 추가 (사라지게 함)
+                card.classList.add('matched'); // CSS opacity 0, pointer-events none 적용
             });
+
             matchedCards.push(...flippedCards); // 맞춘 카드 배열에 추가
 
-            resetBoard(); // 보드 상태 초기화
+            resetBoard(); // 보드 상태 초기화 (뒤집힌 카드 배열 초기화, 잠금 해제)
         }
 
+        // 카드가 일치하지 않았을 때 처리하는 함수 (다시 뒤집기)
         function unflipCards() {
             playSound(mismatchSound); // 틀렸을 때 소리 재생
             setTimeout(() => {
-                flippedCards.forEach(card => card.classList.remove('flipped')); // 다시 뒤집기
+                flippedCards.forEach(card => card.classList.remove('flipped')); // 다시 뒤집기 애니메이션 제거
                 resetBoard(); // 보드 상태 초기화
-            }, 1000); // 1초 후 뒤집음
+            }, 1000); // 1초(1000ms) 후 다시 뒤집음
         }
 
+        // 보드 상태를 초기화하는 함수
         function resetBoard() {
             flippedCards = []; // 뒤집힌 카드 배열 초기화
             lockBoard = false; // 보드 잠금 해제
@@ -210,17 +262,22 @@
             // 모든 카드를 다 맞췄는지 확인
             if (matchedCards.length === duplicatedSymbols.length) {
                 setTimeout(() => {
-                    alert('🎉 모두 맞추셨습니다! 다시 시작합니다! 🎉');
-                    resetGame(); // 게임 재시작
-                }, 500); // 0.5초 후 알림 및 재시작
+                    alert('🎉 모두 맞추셨습니다! 🎉'); // 게임 완료 메시지
+                    // 선택적으로 게임 완료 후 자동으로 재시작하려면 resetGame() 호출
+                    // resetGame();
+                }, 500); // 0.5초 후 알림
             }
         }
 
+        // 게임을 처음부터 다시 시작하는 함수
         function resetGame() {
             setupGame(); // 게임 초기 설정 다시 실행
         }
 
-        // 게임 시작
+        // "다시 시작" 버튼에 클릭 이벤트 리스너 추가
+        restartButton.addEventListener('click', resetGame);
+
+        // 게임 시작 (페이지 로드 시)
         setupGame();
     </script>
 </body>
